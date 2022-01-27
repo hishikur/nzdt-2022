@@ -37,8 +37,8 @@ sap_hana_hsr_roles:
   - secondary
 
 sap_hana_hsr_aliases:
-  - hdb1
-  - hdb2
+  - DC1
+  - DC2
 
 sap_hana_hsr_role: "{{ sap_hana_hsr_roles[ansible_play_hosts.index(inventory_hostname)] }}"
 sap_hana_hsr_alias: "{{ sap_hana_hsr_aliases[ansible_play_hosts.index(inventory_hostname)] }}"
