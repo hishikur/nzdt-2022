@@ -107,7 +107,7 @@
 - name: upgrade (secondary)
   hosts: hanas
   roles:
-    - role: oatakan.{{ sap_hana_deployment_hana_sid | lower }}l_upgrade
+    - role: oatakan.rhel_upgrade
       update_reboot_kernel: yes
       become: no
       when: (pcs_host_secondary != 'null')
@@ -292,7 +292,7 @@
         - ('process hdbdaemon {{ sap_hana_deployment_hana_sid }} Daemon not running' not in hdb_start.stdout)
 
   roles:
-    - role: oatakan.{{ sap_hana_deployment_hana_sid | lower }}l_upgrade
+    - role: oatakan.rhel_upgrade
       update_reboot_kernel: yes
       become: no
       when: (pcs_host_primary != 'null')
