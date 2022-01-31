@@ -10,7 +10,7 @@
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
         hdbnsutil -sr_state
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       # #become_method: su
       register: find_hana_role
 
@@ -42,7 +42,7 @@
   hosts: hanas
   gather_facts: no
   become: yes
-  become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+  become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
   #  #become_method: su
   tasks:
     - name: ensure replication status is ACTIVE
@@ -76,7 +76,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
        #become_method: su
 
@@ -84,7 +84,7 @@
 - name: unregister secondary (secondary)
   hosts: hanas
   become: yes
-  become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+  become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
    # #become_method: su
   tasks:
     - name: unregister site
@@ -102,21 +102,6 @@
       until: unregister_site is success
       retries: 10
       delay: 5
-
-   # - name: {{ sap_hana_deployment_hana_sid }} start
-    #  shell: >
-    #    source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
-   #     {{ sap_hana_deployment_hana_sid }} start
-  #    args:
-   #     chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
-    #  register: hdb_start
- #     when:
-  #      - pcs_host_secondary != 'null'
-   #     - sap_hana_site_id != ''
-    #    - unregister_site.rc == 0
-     # failed_when:
-      #  - hdb_start.rc > 0
-       # - ('process hdbdaemon {{ sap_hana_deployment_hana_sid }} Daemon not running' not in hdb_start.stdout)
 
 
 - name: upgrade (secondary)
@@ -147,27 +132,11 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       register: reregister_site
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       #  # #become_method: su
       ignore_errors: yes
       when: (pcs_host_secondary != 'null')
 
-   #  - name: re-register site after upgrade online mode
-     #  shell: >
-       #  source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
-   #      hdbnsutil -sr_register --name=hdb{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
-     #    --remoteHost={{ pcs_host_primary }}
-       #  --remoteInstance=01
- #        --replicationMode=syncmem
-   #      --online
-     #  args:
-       #  chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
-   #    when: ('system must be shut down' in reregister_site.stdout)
-     #  become: yes
-   #    become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
-       # #become_method: su
-  #     ignore_errors: yes
-    #   when: (pcs_host_secondary != 'null')
 
     - name: reboot system
       reboot:
@@ -181,7 +150,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
        # #become_method: su
      #  ignore_errors: yes
       when: (pcs_host_secondary != 'null')
@@ -200,7 +169,7 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01/exe/python_support
       register: wait_sys_replication
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
        # #become_method: su
       until: wait_sys_replication.stdout == 'ACTIVE'
@@ -209,34 +178,8 @@
       failed_when: false
 
 
-#- name: Suspend DB
-#  hosts: "tag_app_sap_hana_ha_demo:&tag_role_s4app"
-#  become: yes
-#  become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
-#   #become_method: su
-#  tasks:
-#    - name: DB suspension
-#      file:
-#        path: /usr/sap/{{ sap_hana_deployment_hana_sid }}/SYS/global/hdb_quiesce.dat
-#        state: touch
-#
-#    - name: wait for disconnect
-#      wait_for:
-#        file: /usr/sap/{{ sap_hana_deployment_hana_sid }}/D01/work/dev_w<#>   # look for the latest file
-#        line: "disconnected from {{ sap_hana_deployment_hana_sid }}"
-
-
 - name: fail over (secondary)
   hosts: hanas
- #  pre_tasks:
-   #  - name: set new primary hana server ip
-     #  add_host:
-       #  name: hana_primary
- #        ip_address: "{{ ansible_ip_addresses[0] | default(ec2_private_ip_address) | default(private_ip) | default(ansible_host) | default(ansible_ssh_host) }}"
-   #    when: (pcs_host_secondary != 'null')
-
- #    - debug:
-   #      var: hostvars['hana_primary']['ip_address']
   tasks:
     - name: set maintenance off
       command: pcs property set maintenance-mode=false
@@ -262,17 +205,9 @@
       retries: 30
       delay: 30
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
        # #become_method: su
-
-#    - name: wait for clone set
-#      shell: pcs status | grep "FAILED Master {{ ansible_fqdn }}"
-#      register: wait_for_clone_set
-#      until: wait_for_clone_set is success
-#      ignore_errors: yes
-#      retries: 30
-#      delay: 3
 
     - pause:
         seconds: 60
@@ -292,21 +227,14 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01/exe/python_support
       register: wait_sys_replication
       until: wait_sys_replication.stdout == 'ACTIVE'
-      retries: 300
+      retries: 45
       delay: 10
       failed_when: false
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
        # #become_method: su
 
- #- name: move the vip on s4app
-   #hosts: "tag_app_sap_hana_ha_demo:&tag_role_s4app"
-   #vars:
-    # this a temporary measure before implementing real vip
-     #sap_hana_vip: "{{ hostvars['hana_primary']['ip_address'] }}"
-   #roles:
-    # - s4-hosts
 
 - name: upgrade (primary)
   hosts: hanas
@@ -322,7 +250,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
        #become_method: su
 
@@ -333,7 +261,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
        #become_method: su
       register: unregister_site
       when: (pcs_host_primary != 'null') and (sap_hana_site_id != '')
@@ -352,7 +280,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
        #become_method: su
       register: hdb_start
       when:
@@ -389,7 +317,7 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       register: reregister_site
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
        #become_method: su
       ignore_errors: yes
       when: (pcs_host_primary != 'null')
@@ -405,7 +333,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
        #become_method: su
 
@@ -420,14 +348,15 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB01
       become: yes
-      become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
        #become_method: su
+
 
 - name: wait for system replication (secondary)
   hosts: hanas
   become: yes
-  become_user: {{ sap_hana_deployment_hana_sid | lower }}adm
+  become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
    #become_method: su
 
   tasks:
@@ -444,6 +373,7 @@
       delay: 10
       failed_when: false
       when: (pcs_host_secondary != 'null')
+
 
 - name: rerun the insights client
   hosts: hanas
