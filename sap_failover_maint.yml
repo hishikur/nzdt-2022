@@ -46,6 +46,7 @@
   tasks:
     - name: Ensure replication status is ACTIVE
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
         | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
@@ -53,6 +54,7 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       register: replication_status
       when: (pcs_host_primary != 'null')
+      changed_when: replication_status.rc != 0
 
     - name: fail when replication status is not ACTIVE
       fail:
@@ -160,6 +162,7 @@
   tasks:
     - name: wait until system replication status is active
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         set -o pipefail ; python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
         | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
@@ -194,6 +197,7 @@
 
     - name: wait for status to be primary
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         hdbnsutil -sr_state | grep 'operation mode{{":"}} primary'
       args:
@@ -218,6 +222,7 @@
 
     - name: wait until system replication status is active
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
         | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
@@ -361,6 +366,7 @@
   tasks:
     - name: wait until system replication status is active
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
         | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
