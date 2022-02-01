@@ -1,0 +1,101 @@
+---
+
+- name: assign groups
+  hosts: hanas
+  gather_facts: yes
+
+  tasks:
+    - name: Gathering Facts of SAP HANA
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+        hdbnsutil -sr_state
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      register: find_hana_role
+      changed_when: find_hana_role.rc != 0
+
+    - name: Get "operation mode" and "site id"
+      set_fact:
+        pcs_mode: "{{ (find_hana_role.stdout_lines | select('match', '^mode: (.*)$') | list)[0] | regex_replace('^mode: (.*)$', '\\1') }}"
+        pcs_site_id: "{{ (find_hana_role.stdout_lines | select('match', '^site id: (.*)$') | list)[0] | default('') | regex_replace('^site id: (.*)$', '\\1') }}"
+
+    - name: Set current HANA status
+      set_fact:
+        pcs_role: "{{ 'primary' if (pcs_mode == 'primary') else 'secondary' }}"
+        pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
+        pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
+
+    - name: create groups
+      add_host:
+        hostname: "{{ item }}"
+        ansible_hostname: "{{ hostvars[item].ansible_hostname }}"
+        groups: hana_{{ hostvars[item].pcs_role }}
+        sap_hana_role: "{{ hostvars[item].pcs_role }}"
+        sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
+      loop: "{{ ansible_play_hosts }}"
+
+
+- name: fail over from primary node to secondary node
+  hosts: hanas
+
+  tasks:
+    - name: set the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=true
+      become: yes
+      when: (pcs_host_secondary != 'null')
+
+    - name: fail over to secondary
+      command: >
+        crm_resource --move
+        --resource SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone -H {{ ansible_fqdn }}
+      when: (pcs_host_secondary != 'null')
+ 
+    - name: wait for status to be primary
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+        hdbnsutil -sr_state | grep 'operation mode{{":"}} primary'
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      register: wait_for_status
+      until: wait_for_status is success
+      retries: 30
+      delay: 30
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null')
+
+    - name: wait for clone set
+      shell: pcs status | grep "FAILED Master {{ ansible_fqdn }}"
+      register: wait_for_clone_set
+      until: wait_for_clone_set is success
+      ignore_errors: yes
+      retries: 30
+      delay: 3
+      when: (pcs_host_secondary != 'null')
+
+    - name: pause
+      pause:
+        seconds: 30
+
+    - name: pcs restore
+      command: >
+        pcs resource clear
+        SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone
+      when: (pcs_host_secondary != 'null')
+
+    - name: wait until system replication status is active (RC=15)
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+        python /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support
+      register: wait_sys_replication
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_primary != 'null')
+      until: wait_sys_replication.rc == 15
+      retries: 45
+      delay: 10
+      failed_when: false
+      changed_when: false
+ 
