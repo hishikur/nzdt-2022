@@ -38,7 +38,7 @@
         sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
       loop: "{{ ansible_play_hosts }}"
 
-- name: "check replication status (primary: {{ pcs_host_primary }})"
+- name: check HANA replication status (primary)
   hosts: hanas
   gather_facts: no
   become: yes
@@ -60,7 +60,7 @@
         msg: "replication status is not ACTIVE. finish the execution"
       when: (pcs_host_primary != 'null') and (replication_status.rc != 15)
       
-- name: prepare for secondary node ({{ pcs_host_secondary }}) maintenance
+- name: prepare for secondary node maintenance
   hosts: hanas
   gather_facts: no
   tasks:
@@ -69,7 +69,7 @@
       become: yes
       when: (pcs_host_secondary != 'null')
 
-    - name: stop HANA database on {{ pcs_host_secondary }}
+    - name: stop HANA database on secondary node
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         sapcontrol -nr {{ sap_hana_deployment_hana_instance_number }} -function StopSystem HDB
@@ -80,7 +80,7 @@
       when: (pcs_host_secondary != 'null')
 
 
-- name: unregister secondary node ({{ pcs_host_secondary }})
+- name: unregister secondary node from HANA system replication
   hosts: hanas
   become: yes
   become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
@@ -102,7 +102,7 @@
       delay: 5
 
 
-- name: "OS upgrade (secondary: {{ pcs_host_secondary }})"
+- name: OS upgrade (secondary)
   hosts: hanas
   roles:
     - role: oatakan.rhel_upgrade
@@ -120,7 +120,7 @@
       debug:
         msg: Primary node is "{{ hana_primary_hostname }}"
 
-    - name: re-register site after upgrade
+    - name: re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         hdbnsutil -sr_register --name=DC{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
@@ -174,7 +174,7 @@
       changed_when: false
 
 
-- name: fail over from {{ pcs_host_primary }} to {{ pcs_host_secondary }}
+- name: fail over from primary node to secondary node
   hosts: hanas
   tasks:
     - name: set maintenance off
