@@ -12,6 +12,7 @@
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       register: find_hana_role
+      changed_when: find_hana_role.rc != 0
 
     - name: Get "operation mode" and "site id" on each nodes
       set_fact:
@@ -51,13 +52,13 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       register: replication_status
-      when: (pcs_host_primary|length > 0)
+      when: (pcs_host_primary != 'null')
 
     - name: fail when replication status is not ACTIVE
       fail:
         msg: "replication status is not ACTIVE. finish the execution"
-      when: (pcs_host_primary|length > 0) and (replication_status.stdout != 'ACTIVE')
-
+      when: (pcs_host_primary != 'null') and (replication_status.stdout != 'ACTIVE')
+      
 - name: prepare for secondary node maintenance
   hosts: hanas
   gather_facts: no
@@ -65,7 +66,7 @@
     - name: set the pacemaker cluster in maintenance mode
       command: pcs property set maintenance-mode=true
       become: yes
-      when: (pcs_host_secondary|length > 0)
+      when: (pcs_host_secondary != 'null')
 
     - name: stop HANA system replication
       shell: >
@@ -75,7 +76,7 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-      when: (pcs_host_secondary|length > 0)
+      when: (pcs_host_secondary != 'null')
 
 
 - name: unregister secondary node (secondary)
@@ -90,7 +91,7 @@
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       register: unregister_site
-      when: (pcs_host_secondary|length > 0) and (sap_hana_site_id|length > 0)
+      when: (pcs_host_secondary != 'null') and (sap_hana_site_id != '')
       failed_when:
         - unregister_site.rc > 0
         - ('this system is not a system replication site' not in unregister_site.stdout)
