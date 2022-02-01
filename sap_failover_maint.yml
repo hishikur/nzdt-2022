@@ -38,7 +38,7 @@
         sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
       loop: "{{ ansible_play_hosts }}"
 
-- name: check replication status (primary)
+- name: "check replication status (primary: {{ pcs_host_primary }})"
   hosts: hanas
   gather_facts: no
   become: yes
@@ -60,7 +60,7 @@
         msg: "replication status is not ACTIVE. finish the execution"
       when: (pcs_host_primary != 'null') and (replication_status.rc != 15)
       
-- name: prepare for secondary node maintenance
+- name: prepare for secondary node ({{ pcs_host_secondary }}) maintenance
   hosts: hanas
   gather_facts: no
   tasks:
@@ -69,7 +69,7 @@
       become: yes
       when: (pcs_host_secondary != 'null')
 
-    - name: stop HANA system replication
+    - name: stop HANA database on {{ pcs_host_secondary }}
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         sapcontrol -nr {{ sap_hana_deployment_hana_instance_number }} -function StopSystem HDB
@@ -80,7 +80,7 @@
       when: (pcs_host_secondary != 'null')
 
 
-- name: unregister secondary node (secondary)
+- name: unregister secondary node ({{ pcs_host_secondary }})
   hosts: hanas
   become: yes
   become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
@@ -102,7 +102,7 @@
       delay: 5
 
 
-- name: upgrade (secondary)
+- name: "OS upgrade (secondary: {{ pcs_host_secondary }})"
   hosts: hanas
   roles:
     - role: oatakan.rhel_upgrade
@@ -150,16 +150,14 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-       # #become_method: su
-     #  ignore_errors: yes
       when: (pcs_host_secondary != 'null')
 
 
-- name: wait for system replication (primary)
+- name: wait for completion of system replication (primary)
   hosts: hanas
 
   tasks:
-    - name: wait until system replication status is active
+    - name: wait until system replication status is active (RC=15)
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
@@ -176,8 +174,7 @@
       changed_when: false
 
 
-
-- name: fail over (secondary)
+- name: fail over from {{ pcs_host_primary }} to {{ pcs_host_secondary }}
   hosts: hanas
   tasks:
     - name: set maintenance off
@@ -194,7 +191,7 @@
         --resource SAPHana_{{ sap_hana_deployment_hana_sid | upper }}_{{ sap_hana_deployment_hana_instance_number }}-clone -H {{ ansible_fqdn }}
       when: (pcs_host_secondary != 'null')
 
-    - name: wait for status to be primary
+    - name: wait for HANA status to be primary
       shell: >
         set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
@@ -208,7 +205,6 @@
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
-       # #become_method: su
 
     - name: pause
       pause:
