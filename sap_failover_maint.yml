@@ -46,20 +46,19 @@
   tasks:
     - name: Ensure replication status is ACTIVE
       shell: >
-        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
-        | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       register: replication_status
       when: (pcs_host_primary != 'null')
-      changed_when: replication_status.rc != 0
+      failed_when: false
+      changed_when: false
 
     - name: fail when replication status is not ACTIVE
       fail:
         msg: "replication status is not ACTIVE. finish the execution"
-      when: (pcs_host_primary != 'null') and (replication_status.stdout != 'ACTIVE')
+      when: (pcs_host_primary != 'null') and (replication_status.rc != 15)
       
 - name: prepare for secondary node maintenance
   hosts: hanas
@@ -162,21 +161,20 @@
   tasks:
     - name: wait until system replication status is active
       shell: >
-        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
-        set -o pipefail ; python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
-        | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
+        python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support
       register: wait_sys_replication
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
-       # #become_method: su
-      until: wait_sys_replication.stdout == 'ACTIVE'
+      until: wait_sys_replication.rc == 15
       retries: 45
       delay: 10
       failed_when: false
+      changed_when: false
+
 
 
 - name: fail over (secondary)
@@ -186,7 +184,8 @@
       command: pcs property set maintenance-mode=false
       when: (pcs_host_secondary != 'null')
 
-    - pause:
+    - name: pause
+      pause:
         seconds: 30
 
     - name: fail over to secondary
@@ -211,7 +210,8 @@
       when: (pcs_host_secondary != 'null')
        # #become_method: su
 
-    - pause:
+    - name: pause
+      pause:
         seconds: 60
 
     - name: pcs restore
@@ -222,21 +222,19 @@
 
     - name: wait until system replication status is active
       shell: >
-        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
-        | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support
       register: wait_sys_replication
-      until: wait_sys_replication.stdout == 'ACTIVE'
+      until: wait_sys_replication.rc == 15
       retries: 45
       delay: 10
       failed_when: false
+      changed_when: false
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
-       # #become_method: su
 
 
 - name: upgrade (primary)
@@ -366,17 +364,16 @@
   tasks:
     - name: wait until system replication status is active
       shell: >
-        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
-        | grep '^overall system replication' | cut -d':' -f2 | awk '{$1=$1};1'
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support
       register: wait_sys_replication
-      until: wait_sys_replication.stdout == 'ACTIVE'
+      until: wait_sys_replication.rc == 15
       retries: 300
       delay: 10
       failed_when: false
+      changed_when: false
       when: (pcs_host_secondary != 'null')
 
 
