@@ -99,3 +99,7 @@
       failed_when: false
       changed_when: false
  
+    - name: unset the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=false
+      become: yes
+      when: (pcs_host_secondary != 'null')
