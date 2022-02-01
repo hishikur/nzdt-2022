@@ -69,7 +69,7 @@
       become: yes
       when: (pcs_host_secondary != 'null')
 
-    - name: stop HANA database on secondary node
+    - name: stop HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         sapcontrol -nr {{ sap_hana_deployment_hana_instance_number }} -function StopSystem HDB
@@ -233,14 +233,14 @@
       when: (pcs_host_secondary != 'null')
 
 
-- name: upgrade (primary)
+- name: OS upgrade (primary)
   hosts: hanas
   pre_tasks:
-    - name: set to maintenance
+    - name: set the pacemaker cluster in maintenance mode
       command: pcs property set maintenance-mode=true
       when: (pcs_host_primary != 'null')
 
-    - name: stop system replication
+    - name: stop HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         sapcontrol -nr {{ sap_hana_deployment_hana_instance_number }} -function StopSystem HDB
@@ -304,7 +304,7 @@
       debug:
         msg: Primary node is "{{ hana_primary_hostname }}"
 
-    - name: re-register site after upgrade
+    - name: re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         hdbnsutil -sr_register --name=DC{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
@@ -358,7 +358,7 @@
    #become_method: su
 
   tasks:
-    - name: wait until system replication status is active
+    - name: wait until system replication status is active (RC=15)
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
