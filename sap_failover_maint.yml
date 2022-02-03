@@ -316,7 +316,6 @@
       register: reregister_site
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-       #become_method: su
       ignore_errors: yes
       when: (pcs_host_primary != 'null')
 
@@ -333,7 +332,6 @@
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_primary != 'null')
-       #become_method: su
 
     - name: reboot system
       reboot:
