@@ -1,6 +1,6 @@
 ---
 
-- name: assign groups
+- name: Assign groups
   hosts: hanas
   gather_facts: yes
 
@@ -25,7 +25,7 @@
         pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
         pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
 
-    - name: create groups
+    - name: Create groups
       add_host:
         hostname: "{{ item }}"
         ansible_hostname: "{{ hostvars[item].ansible_hostname }}"
@@ -35,21 +35,21 @@
       loop: "{{ ansible_play_hosts }}"
 
 
-- name: fail over from primary node to secondary node
+- name: Fail over from primary node to secondary node
   hosts: hanas
 
   tasks:
-    - name: unset the pacemaker cluster in maintenance mode
+    - name: Unset the pacemaker cluster in maintenance mode
       command: pcs property set maintenance-mode=false
       become: yes
       when: (pcs_host_secondary != 'null')
 
-    - name: fail over to secondary
+    - name: Fail over to secondary
       command: >
         pcs resource move SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone {{ ansible_fqdn }} --master
       when: (pcs_host_secondary != 'null')
  
-    - name: wait for status to be primary
+    - name: Wait for status to be primary on hdbnsutil
       shell: >
         set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
@@ -64,17 +64,17 @@
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
 
-    - name: pause
+    - name: Pause
       pause:
         seconds: 30
 
-    - name: pcs restore
+    - name: Clear constraint
       command: >
         pcs resource clear
         SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone
       when: (pcs_host_secondary != 'null')
 
-    - name: wait until system replication status is active (RC=15)
+    - name: Wait until system replication status is active (RC=15) on systemReplicationStatus.py
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
@@ -90,7 +90,7 @@
       failed_when: false
       changed_when: false
  
-    - name: Clear fained operation on cluster
+    - name: Clear failed operation on cluster
       command: >
         pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
       when: (pcs_host_primary != 'null')
