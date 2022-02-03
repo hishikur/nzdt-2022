@@ -51,8 +51,9 @@
  
     - name: wait for status to be primary
       shell: >
+        set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
-        hdbnsutil -sr_state | grep 'operation mode{{":"}} primary'
+        hdbnsutil -sr_state | grep 'operation mode: primary'
       args:
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       register: wait_for_status
@@ -89,3 +90,7 @@
       failed_when: false
       changed_when: false
  
+    - name: Clear fained operation on cluster
+      command: >
+        pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+      when: (pcs_host_primary != 'null')
