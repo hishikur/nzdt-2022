@@ -39,15 +39,14 @@
   hosts: hanas
 
   tasks:
-    - name: set the pacemaker cluster in maintenance mode
-      command: pcs property set maintenance-mode=true
+    - name: unset the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=false
       become: yes
       when: (pcs_host_secondary != 'null')
 
     - name: fail over to secondary
       command: >
-        crm_resource --move
-        --resource SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone -H {{ ansible_fqdn }}
+        pcs resource move SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone {{ ansible_fqdn }} --master
       when: (pcs_host_secondary != 'null')
  
     - name: wait for status to be primary
@@ -99,7 +98,3 @@
       failed_when: false
       changed_when: false
  
-    - name: unset the pacemaker cluster in maintenance mode
-      command: pcs property set maintenance-mode=false
-      become: yes
-      when: (pcs_host_secondary != 'null')
