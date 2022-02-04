@@ -84,7 +84,7 @@
       register: unregister_site
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-      when: (pcs_host_secondary != 'null') and (sap_hana_site_id != '')
+      when: (pcs_host_secondary != 'null') and (sap_hana_site_id|length > 0)
       failed_when:
         - unregister_site.rc > 0
         - ('this system is not a system replication site' not in unregister_site.stdout)
@@ -102,7 +102,7 @@
   post_tasks:
     - name: set primary hostname
       set_fact:
-        hana_primary_hostname: "{{ hostvars[groups['hana_secondary'][0]]['ansible_hostname'] }}"
+        hana_primary_hostname: "{{ hostvars[groups['hana_primary'][0]]['ansible_hostname'] }}"
       when: (pcs_host_primary != 'null')
 
     - name: Re-register site after upgrade for HANA system replication
