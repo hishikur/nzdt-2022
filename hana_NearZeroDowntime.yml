@@ -1,6 +1,6 @@
 ---
 
-- name: Assign groups
+- name: Gathering current informations and create groups
   hosts: hanas
   gather_facts: yes
 
@@ -38,7 +38,7 @@
         sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
       loop: "{{ ansible_play_hosts }}"
 
-- name: Maintenance to standby node
+- name: Maintenance for standby node
   hosts: hanas
   gather_facts: no
   pre_tasks:
@@ -100,15 +100,6 @@
       when: (pcs_host_secondary != 'null')
 
   post_tasks:
-    - name: Set primary hostname
-      set_fact:
-        hana_primary_hostname: "{{ hostvars[groups['hana_primary'][0]]['ansible_hostname'] }}"
-        when: (pcs_host_secondary != 'null')
-
-    - name: Display primary node informations
-      debug:
-        msg: Primary node is "{{ hana_primary_hostname }}"
-
     - name: Re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
@@ -124,7 +115,7 @@
       ignore_errors: yes
       when: (pcs_host_secondary != 'null')
 
-    - name: Reboot secondary node
+    - name: Reboot secondary node OS
       reboot:
       when: (pcs_host_secondary != 'null')
       become: yes
@@ -156,7 +147,7 @@
       changed_when: false
  
 
-- name: Assign groups
+- name: Gathering current informations and create groups
   hosts: hanas
   gather_facts: yes
 
