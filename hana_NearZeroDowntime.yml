@@ -332,7 +332,7 @@
       register: unregister_site
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-      when: (pcs_host_secondary != 'null') and (sap_hana_site_id|length>0)
+      when: (pcs_host_secondary != 'null') and (sap_hana_site_id|length > 0)
       failed_when:
         - unregister_site.rc > 0
         - ('this system is not a system replication site' not in unregister_site.stdout)
@@ -357,7 +357,7 @@
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         hdbnsutil -sr_register --name=DC{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
-        --remoteHost={{ hana_primary_hostname }}
+        --remoteHost={{ hana_secondary_hostname }}
         --remoteInstance={{ sap_hana_deployment_hana_instance_number }}
         --replicationMode=syncmem
       args:
