@@ -100,6 +100,11 @@
       when: (pcs_host_secondary != 'null')
 
   post_tasks:
+    - name: set primary hostname
+      set_fact:
+        hana_primary_hostname: "{{ hostvars[groups['hana_secondary'][0]]['ansible_hostname'] }}"
+      when: (pcs_host_primary != 'null')
+
     - name: Re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
@@ -128,6 +133,11 @@
         chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null')
+
+    - name: Unset the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=false
+      become: yes
       when: (pcs_host_secondary != 'null')
 
     - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
@@ -186,11 +196,6 @@
   hosts: hanas
 
   tasks:
-    - name: Unset the pacemaker cluster in maintenance mode
-      command: pcs property set maintenance-mode=false
-      become: yes
-      when: (pcs_host_secondary != 'null')
-
     - name: Fail over to secondary
       command: >
         pcs resource move SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone {{ ansible_fqdn }} --master
@@ -241,3 +246,161 @@
       command: >
         pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
       when: (pcs_host_primary != 'null')
+
+
+- name: Gathering current informations and create groups
+  hosts: hanas
+  gather_facts: yes
+
+  tasks:
+    - name: Gathering Facts of SAP HANA
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        hdbnsutil -sr_state
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      register: find_hana_role
+      changed_when: find_hana_role.rc != 0
+
+    - name: Get "operation mode" and "site id" on each nodes
+      set_fact:
+        pcs_mode: "{{ (find_hana_role.stdout_lines | select('match', '^mode: (.*)$') | list)[0] | regex_replace('^mode: (.*)$', '\\1') }}"
+        pcs_site_id: "{{ (find_hana_role.stdout_lines | select('match', '^site id: (.*)$') | list)[0] | default('') | regex_replace('^site id: (.*)$', '\\1') }}"
+
+    - name: Set current HANA status
+      set_fact:
+        pcs_role: "{{ 'primary' if (pcs_mode == 'primary') else 'secondary' }}"
+        pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
+        pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
+
+    - name: Display primary/secondary informations
+      debug:
+        msg: This node is "{{ pcs_role }}"
+
+    - name: Create groups
+      add_host:
+        hostname: "{{ item }}"
+        ansible_hostname: "{{ hostvars[item].ansible_hostname }}"
+        groups: hana_{{ hostvars[item].pcs_role }}
+        sap_hana_role: "{{ hostvars[item].pcs_role }}"
+        sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
+      loop: "{{ ansible_play_hosts }}"
+
+- name: Maintenance for standby node (past primary)
+  hosts: hanas
+  gather_facts: no
+  pre_tasks:
+    - name: Ensure HANA replication status is ACTIVE
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      register: replication_status
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_primary != 'null')
+      failed_when: false
+      changed_when: false
+
+    - name: Fail when replication status is not ACTIVE
+      fail:
+        msg: "replication status is not ACTIVE. finish the execution"
+      when: (pcs_host_primary != 'null') and (replication_status.rc != 15)
+      
+    - name: Set the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=true
+      become: yes
+      when: (pcs_host_secondary != 'null')
+
+    - name: Stop HANA DB on standby node
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        sapcontrol -nr {{ sap_hana_deployment_hana_instance_number }} -function StopSystem HDB
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null')
+
+    - name: Unregister secondary node from site
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        hdbnsutil -sr_unregister --id={{ sap_hana_site_id }}
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      register: unregister_site
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null') and (sap_hana_site_id != '')
+      failed_when:
+        - unregister_site.rc > 0
+        - ('this system is not a system replication site' not in unregister_site.stdout)
+        - ('system must be running' not in unregister_site.stdout)
+      until: unregister_site is success
+      retries: 10
+      delay: 5
+
+  roles:
+    - role: oatakan.rhel_upgrade
+      update_reboot_kernel: yes
+      become: no
+      when: (pcs_host_secondary != 'null')
+
+  post_tasks:
+    - name: set primary hostname
+      set_fact:
+        hana_primary_hostname: "{{ hostvars[groups['hana_secondary'][0]]['ansible_hostname'] }}"
+      when: (pcs_host_primary != 'null')
+
+    - name: Re-register site after upgrade for HANA system replication
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        hdbnsutil -sr_register --name=DC{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
+        --remoteHost={{ hana_primary_hostname }}
+        --remoteInstance={{ sap_hana_deployment_hana_instance_number }}
+        --replicationMode=syncmem
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      register: reregister_site
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      ignore_errors: yes
+      when: (pcs_host_secondary != 'null')
+
+    - name: Reboot secondary node OS
+      reboot:
+      when: (pcs_host_secondary != 'null')
+      become: yes
+
+    - name: Start HANA DB on standby node
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
+        HDB start
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null')
+
+    - name: Unset the pacemaker cluster in maintenance mode
+      command: pcs property set maintenance-mode=false
+      become: yes
+      when: (pcs_host_secondary != 'null')
+
+    - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
+      shell: >
+        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+        python /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support
+      register: wait_sys_replication
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_primary != 'null')
+      until: wait_sys_replication.rc == 15
+      retries: 45
+      delay: 10
+      failed_when: false
+      changed_when: false
+ 
