@@ -38,11 +38,11 @@
         sap_hana_site_id: "{{ hostvars[item].pcs_site_id }}"
       loop: "{{ ansible_play_hosts }}"
 
-- name: Check HANA replication status (primary)
+- name: Maintenance to standby node
   hosts: hanas
   gather_facts: no
-  tasks:
-    - name: Ensure replication status is ACTIVE
+  pre_tasks:
+    - name: Ensure HANA replication status is ACTIVE
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
@@ -139,7 +139,7 @@
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
 
-    - name: Wait until system replication status is active (RC=15) on systemReplicationStatus.py
+    - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
@@ -148,7 +148,7 @@
       register: wait_sys_replication
       become: yes
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-      when: (pcs_host_secondary != 'null')
+      when: (pcs_host_primary != 'null')
       until: wait_sys_replication.rc == 15
       retries: 45
       delay: 10
@@ -205,7 +205,7 @@
         pcs resource move SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone {{ ansible_fqdn }} --master
       when: (pcs_host_secondary != 'null')
  
-    - name: Wait for status to be primary on hdbnsutil
+    - name: Wait for status to be primary using hdbnsutil
       shell: >
         set -o pipefail &&
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
@@ -230,7 +230,7 @@
         SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone
       when: (pcs_host_secondary != 'null')
 
-    - name: Wait until system replication status is active (RC=15) on systemReplicationStatus.py
+    - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
         python /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}/exe/python_support/systemReplicationStatus.py
