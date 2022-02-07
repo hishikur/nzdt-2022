@@ -244,7 +244,7 @@
       when: (pcs_host_secondary != 'null')
       changed_when: false
       retries: 30
-      delay: 3
+      delay: 5
 
     - name: Wait for status to be primary using hdbnsutil
       shell: >
