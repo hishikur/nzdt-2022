@@ -155,7 +155,13 @@
       delay: 10
       failed_when: false
       changed_when: false
- 
+
+    - name: Clear failed operation on cluster
+      command: >
+        pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+      become: yes
+      when: (pcs_host_primary != 'null')
+
 
 - name: Gathering current informations and create groups
   hosts: hanas
@@ -205,21 +211,44 @@
       command: >
         pcs resource move SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone {{ ansible_fqdn }} --master
       when: (pcs_host_secondary != 'null')
- 
+
+# pcs resouce clenup も組み込みたい 
+#    - name: Wait for status to be primary using hdbnsutil
+#      shell: >
+#        set -o pipefail &&
+#        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+#        hdbnsutil -sr_state | grep 'operation mode: primary'
+#      args:
+#        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+#      register: wait_for_status
+#      until: wait_for_status is success
+#      retries: 30
+#      delay: 30
+#      become: yes
+#      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+#      when: (pcs_host_secondary != 'null')
+
     - name: Wait for status to be primary using hdbnsutil
-      shell: >
-        set -o pipefail &&
-        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
-        hdbnsutil -sr_state | grep 'operation mode: primary'
-      args:
-        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      block:
+      - name: Clear failed operation on cluster
+        command: >
+          pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+        become: yes
+        when: (pcs_host_primary != 'null')
+      - name : Check using hdbnsutil
+        shell: >
+          set -o pipefail &&
+          source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+          hdbnsutil -sr_state | grep 'operation mode: primary'
+        args:
+          chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+        become: yes
+        become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+        when: (pcs_host_secondary != 'null')
       register: wait_for_status
       until: wait_for_status is success
       retries: 30
       delay: 30
-      become: yes
-      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-      when: (pcs_host_secondary != 'null')
 
     - name: Pause
       pause:
@@ -229,8 +258,10 @@
       command: >
         pcs resource clear
         SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone
+      become: yes
       when: (pcs_host_secondary != 'null')
 
+# pcs resouce clenup も組み込みたい 
     - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
@@ -250,6 +281,7 @@
     - name: Clear failed operation on cluster
       command: >
         pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+      become: yes
       when: (pcs_host_primary != 'null')
 
 
@@ -358,14 +390,14 @@
     - name: set primary hostname
       set_fact:
         hana_primary_hostname: "{{ hostvars[groups['hana_secondary'][0]]['ansible_hostname'] }}"
-      when: (pcs_host_primary != 'null')
+      when: (pcs_host_secondary != 'null')
 
 # hana_secondary_hostname' is undefined\n\nThe
     - name: Re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
         hdbnsutil -sr_register --name=DC{{ sap_hana_site_id | default(((hostvars[groups['hana_primary'][0]]['sap_hana_site_id']) | int)+1) | string }}
-        --remoteHost={{ hana_secondary_hostname }}
+        --remoteHost={{ hana_primary_hostname }}
         --remoteInstance={{ sap_hana_deployment_hana_instance_number }}
         --replicationMode=syncmem
       args:
@@ -411,4 +443,9 @@
       delay: 10
       failed_when: false
       changed_when: false
- 
+
+    - name: Clear failed operation on cluster
+      command: >
+        pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+      become: yes
+      when: (pcs_host_primary != 'null')
