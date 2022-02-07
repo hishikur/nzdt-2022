@@ -234,6 +234,20 @@
       become: yes
       when: (pcs_host_primary != 'null')
 
+    - name: wait for clone set
+      shell: >
+        set -o pipefail &&
+        pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }} &&
+        pcs status | grep Master | grep "{{ ansible_fqdn }}"
+      register: wait_for_clone_set
+      until: wait_for_clone_set is success
+      become: yes
+      changed_when: false
+      retries: 30
+      delay: 3
+
+
+
     - name: Wait for status to be primary using hdbnsutil
       shell: >
         set -o pipefail &&
