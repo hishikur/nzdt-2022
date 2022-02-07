@@ -228,37 +228,58 @@
 #      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
 #      when: (pcs_host_secondary != 'null')
 
+    - name: Clear failed operation on cluster
+      command: >
+        pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+      become: yes
+      when: (pcs_host_primary != 'null')
+
     - name: Wait for status to be primary using hdbnsutil
-      block:
-      - name: Increment the retry count
-        set_fact:
-          retry_count: "{{ 0 if retry_count is undefined else retry_count | int + 1 }}"
-      - name: Clear failed operation on cluster
-        command: >
-          pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
-        become: yes
-        when: (pcs_host_primary != 'null')
-      - name : Check using hdbnsutil
-        shell: >
-          set -o pipefail &&
-          source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
-          hdbnsutil -sr_state | grep 'operation mode: primary'
-        args:
-          chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
-        become: yes
-        become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
-        when: (pcs_host_secondary != 'null')
-        register: wait_for_status
-        until: wait_for_status is success
-      - name: Sleep between retries
-        wait_for:
-          timeout: 30
-        delegate_to: localhost
-      rescue:
-      - name: Max retries count
-        fail:
-          msg: Maximum retries of grouped tasks reached
-        when: retry_count | int == 30
+      shell: >
+        set -o pipefail &&
+        source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+        hdbnsutil -sr_state | grep 'operation mode: primary'
+      args:
+        chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+      register: wait_for_status
+      until: wait_for_status is success
+      retries: 30
+      delay: 30
+      become: yes
+      become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+      when: (pcs_host_secondary != 'null')
+
+#    - name: Wait for status to be primary using hdbnsutil
+#      block:
+#      - name: Increment the retry count
+#        set_fact:
+#          retry_count: "{{ 0 if retry_count is undefined else retry_count | int + 1 }}"
+#      - name: Clear failed operation on cluster
+#        command: >
+#          pcs resource cleanup SAPHana_{{ sap_hana_deployment_hana_sid }}_{{ sap_hana_deployment_hana_instance_number }}-clone node={{ ansible_fqdn }}
+#        become: yes
+#        when: (pcs_host_primary != 'null')
+#      - name : Check using hdbnsutil
+#        shell: >
+#          set -o pipefail &&
+#          source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
+#          hdbnsutil -sr_state | grep 'operation mode: primary'
+#        args:
+#          chdir: /usr/sap/{{ sap_hana_deployment_hana_sid }}/HDB{{ sap_hana_deployment_hana_instance_number }}
+#        become: yes
+#        become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
+#        when: (pcs_host_secondary != 'null')
+#        register: wait_for_status
+#        until: wait_for_status is success
+#      - name: Sleep between retries
+#        wait_for:
+#          timeout: 30
+#        delegate_to: localhost
+#      rescue:
+#      - name: Max retries count
+#        fail:
+#          msg: Maximum retries of grouped tasks reached
+#        when: retry_count | int == 30
 
     - name: Pause
       pause:
@@ -271,7 +292,6 @@
       become: yes
       when: (pcs_host_secondary != 'null')
 
-# pcs resouce clenup も組み込みたい 
     - name: Wait until system replication status is active (RC=15) using systemReplicationStatus.py
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid }}/home/.sapenv.sh &&
