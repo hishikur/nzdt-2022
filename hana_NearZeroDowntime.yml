@@ -25,9 +25,9 @@
         pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
         pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
 
-    - name: Display primary/secondary informations
+    - name: DEBUG Display primary/secondary informations
       debug:
-        msg: This node is "{{ pcs_role }}"
+        msg: This node is "{{ pcs_role }}" "{{ pcs_mode }}" "{{ pcs_site_id }}"
 
     - name: Create groups
       add_host:
@@ -182,6 +182,11 @@
         pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
         pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
 
+    - name: DEBUG Display primary/secondary informations
+      debug:
+        msg: This node is "{{ pcs_role }}" "{{ pcs_mode }}" "{{ pcs_site_id }}"
+
+
     - name: Create groups
       add_host:
         hostname: "{{ item }}"
@@ -273,9 +278,10 @@
         pcs_host_primary: "{{ ansible_hostname if (pcs_mode == 'primary') else 'null'  }}"
         pcs_host_secondary: "{{ ansible_hostname if (pcs_mode != 'primary') else 'null' }}"
 
-    - name: Display primary/secondary informations
+    - name: DEBUG Display primary/secondary informations
       debug:
-        msg: This node is "{{ pcs_role }}"
+        msg: This node is "{{ pcs_role }}" "{{ pcs_mode }}" "{{ pcs_site_id }}"
+
 
     - name: Create groups
       add_host:
@@ -323,6 +329,7 @@
       become_user: "{{ sap_hana_deployment_hana_sid | lower }}adm"
       when: (pcs_host_secondary != 'null')
 
+#上手く行って無さそう
     - name: Unregister secondary node from site
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
@@ -353,6 +360,7 @@
         hana_primary_hostname: "{{ hostvars[groups['hana_secondary'][0]]['ansible_hostname'] }}"
       when: (pcs_host_primary != 'null')
 
+# hana_secondary_hostname' is undefined\n\nThe
     - name: Re-register site after upgrade for HANA system replication
       shell: >
         source /usr/sap/{{ sap_hana_deployment_hana_sid | upper }}/home/.sapenv.sh &&
